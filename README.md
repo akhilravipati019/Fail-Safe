@@ -89,6 +89,52 @@ The dev server proxies `/api/*` to `http://localhost:8000`.
 - **Single student check**: fill in the form (built dynamically from the
   model's feature list) for one student and run the analysis inline.
 
+## Deploying to Render
+
+This repo includes a [`render.yaml`](render.yaml) Blueprint that defines two
+services: `failsafe-backend` (Python web service) and `failsafe-frontend`
+(static site).
+
+1. Push this repo to GitHub/GitLab.
+2. In the Render dashboard, click **New > Blueprint** and select the repo.
+   Render reads `render.yaml` and creates both services.
+3. Set the `GEMINI_API_KEY` env var on `failsafe-backend` in the Render
+   dashboard (it's marked `sync: false` so it isn't stored in the repo). Leave
+   it blank to use rule-based explanations only.
+4. After the first deploy, note each service's URL and update:
+   - `failsafe-backend` → `FRONTEND_ORIGIN` env var → the frontend's URL
+     (e.g. `https://failsafe-frontend.onrender.com`).
+   - `failsafe-frontend` → `VITE_API_BASE_URL` env var → the backend's URL
+     (e.g. `https://failsafe-backend.onrender.com`, no trailing slash or
+     `/api` suffix).
+
+   Then trigger a redeploy of both services so the new values take effect
+   (the frontend value is baked in at build time).
+5. Create a teacher login on the backend. Open a **Shell** for
+   `failsafe-backend` in the Render dashboard and run either:
+   ```bash
+   python seed_admin.py
+   ```
+   (interactive), or non-interactively:
+   ```bash
+   SEED_TEACHER_USERNAME=teacher1 SEED_TEACHER_PASSWORD=Password123 SEED_TEACHER_FULL_NAME="Ms. Teacher" python seed_admin.py
+   ```
+
+### SQLite persistence caveat
+
+Render's free web services use an **ephemeral filesystem** — the SQLite file
+(`failsafe.db`) is wiped on every deploy and restart, so teacher accounts
+created via the Shell won't survive a redeploy. Options:
+
+- Add a paid **Render Disk** to `failsafe-backend` mounted at, e.g., `/data`,
+  and set `DATABASE_URL=sqlite:////data/failsafe.db` so the DB file persists
+  across deploys/restarts.
+- Or switch to Render's managed **PostgreSQL** and update `DATABASE_URL`
+  accordingly (SQLAlchemy supports both via the same `database_url` setting).
+
+For a quick demo deploy, re-running the seed command after each redeploy is
+fine.
+
 ## Security notes
 
 - Passwords are hashed with bcrypt; JWTs (1-hour expiry by default) are
